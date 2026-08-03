@@ -106,7 +106,8 @@ def build_runner(state_path: Path | None = None) -> MissionRunner:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run a Titan mission")
-    parser.add_argument("goal", help="Mission goal to execute")
+    parser.add_argument("goal", nargs="?", default=None, help="Mission goal to execute")
+    parser.add_argument("--goal", dest="goal_flag", default=None, help="Mission goal to execute")
     parser.add_argument("--description", default=None, help="Optional goal description")
     parser.add_argument("--priority", default=0, type=int, help="Optional goal priority")
     parser.add_argument("--state-file", default="state.json", help="Path to the kernel state file")
@@ -117,10 +118,13 @@ def main(argv: list[str] | None = None) -> int:
     """Parse the CLI arguments and run the mission."""
     parser = build_parser()
     args = parser.parse_args(argv)
+    goal = args.goal or args.goal_flag
+    if not goal:
+        parser.error("the following arguments are required: goal")
 
     async def _run() -> None:
         runner = build_runner(Path(args.state_file))
-        execution = await runner.run(args.goal, description=args.description, priority=args.priority)
+        execution = await runner.run(goal, description=args.description, priority=args.priority)
         print(runner.format_log(execution))
 
     asyncio.run(_run())

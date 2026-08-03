@@ -3,7 +3,7 @@
 import asyncio
 from types import SimpleNamespace
 
-from apps.mission_runner import MissionRunner
+from apps.mission_runner import MissionRunner, build_parser
 from core.models import ExecutionReport, Goal, Task
 
 
@@ -104,3 +104,9 @@ def test_run_mission_executes_and_records_history() -> None:
         assert orchestrator.calls[0][0].title == "Launch the mission"
 
     asyncio.run(run())
+
+
+def test_build_parser_accepts_goal_flag() -> None:
+    parser = build_parser()
+    args = parser.parse_args(["--goal", "Research today's AI news"])
+    assert args.goal_flag == "Research today's AI news"
