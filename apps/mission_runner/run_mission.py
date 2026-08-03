@@ -13,6 +13,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from apps.mission_runner.mission_runner import MissionRunner
+from apps.mission_runner.research_skill import ResearchSkill
 from core.decision import DecisionEngine, WeightedDecisionPolicy
 from core.decision.evaluators import ApprovalEvaluator, CostEvaluator, RiskEvaluator, StrategySelector
 from core.events import InMemoryEventBus
@@ -54,20 +55,6 @@ class _NoopApproval(ApprovalEvaluator):
         return True
 
 
-class _EchoMissionSkill(Skill):
-    name = "echo_mission"
-
-    async def validate(self, input_data: dict[str, Any]) -> None:
-        if "goal" not in input_data:
-            raise ValueError("goal is required")
-
-    async def execute(self, input_data: dict[str, Any]) -> Any:
-        return input_data["goal"]
-
-    async def rollback(self, input_data: dict[str, Any], error: Exception) -> None:
-        return None
-
-
 def build_runner(state_path: Path | None = None) -> MissionRunner:
     """Create a runnable mission runner using the local in-memory stack."""
     kernel = TitanKernel(
@@ -91,7 +78,7 @@ def build_runner(state_path: Path | None = None) -> MissionRunner:
         approval_evaluator=_NoopApproval(),
     )
     registry = SkillRegistry()
-    registry.register(_EchoMissionSkill())
+    registry.register(ResearchSkill())
     skill_runtime = SkillRuntime(registry, PermissionManager())
     memory = InMemoryMemory()
     return MissionRunner(

@@ -125,8 +125,8 @@ class MissionRunner:
         if self._skill_runtime is None:
             return type("SkillResult", (), {"skill_name": "mission-skill", "output": goal.title})()
         return await self._skill_runtime.execute(
-            "echo_mission",
-            {"goal": goal.title, "task": task.title, "context": context},
+            "research",
+            {"goal": goal.title, "task": task.title, "context": context, "memory": self._memory},
         )
 
     async def _run_orchestrator(
