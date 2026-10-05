@@ -32,3 +32,25 @@ def test_research_skill_returns_report_and_persists_it() -> None:
         assert await memory.retrieve(f"research:reports:{report.id}") == report
 
     asyncio.run(run())
+
+
+def test_research_skill_generates_markdown_report_and_change_summary() -> None:
+    async def run() -> None:
+        registry = SkillRegistry()
+        registry.register(ResearchSkill(source_manager=__import__("agents.research.source_manager", fromlist=["SourceManager"]).SourceManager()))
+        skill = registry.get("research")
+        assert skill is not None
+
+        memory = RecordingMemory()
+        report = await skill.execute(
+            {
+                "goal": "Research today's AI news, summarize the five biggest stories, save them to memory, generate a Markdown report, and tell me what changed since yesterday.",
+                "memory": memory,
+            }
+        )
+        assert isinstance(report, ResearchReport)
+        assert report.metadata["markdown_report"].startswith("# Research")
+        assert "## Top Stories" in report.metadata["markdown_report"]
+        assert report.metadata["change_summary"]
+
+    asyncio.run(run())

@@ -17,6 +17,10 @@ Create independently versioned or deployable units as subdirectories within the 
 
 Environment-specific configuration is supplied through environment variables. `.env.example` documents non-secret defaults; `.env` is local-only and ignored by Git. Use a secret manager for production credentials.
 
+## Research providers
+
+The research provider framework in `agents/research/providers/` normalizes search and news results from local Markdown documents, RSS feeds, and repository sources. The provider registry merges and ranks these results for a query.
+
 ## Quality baseline
 
 Ruff handles formatting and linting, mypy provides static typing, and pytest runs tests. The root `pyproject.toml` centralizes their configuration.

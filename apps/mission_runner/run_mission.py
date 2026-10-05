@@ -21,10 +21,14 @@ from core.executor import PlaceholderExecutor
 from core.kernel import StateManager, TitanKernel
 from core.learning import InMemoryLearning
 from core.memory import InMemoryMemory
+from core.llm.base import LLMProviderRegistry
 from core.orchestrator import WorkflowOrchestrator
 from core.planner import SimplePlanner
 from core.reasoner import SimpleReasoner
+from core.reasoner.llm import LLMReasoner
+from core.reasoner.tool_aware import ToolAwareReasoner
 from core.skills import PermissionManager, Skill, SkillRegistry, SkillRuntime
+from core.tools import PythonToolManager
 
 
 class _NoopStrategy(StrategySelector):
@@ -62,9 +66,13 @@ def build_runner(state_path: Path | None = None) -> MissionRunner:
         mission_handler=lambda _: None,
     )
     planner = SimplePlanner()
+    provider = LLMProviderRegistry.from_env().get_provider()
+    tool_manager = PythonToolManager()
+    base_reasoner = LLMReasoner(provider=provider) if provider is not None else SimpleReasoner()
+    reasoner = ToolAwareReasoner(tool_registry=tool_manager)
     orchestrator = WorkflowOrchestrator(
         planner=planner,
-        reasoner=SimpleReasoner(),
+        reasoner=reasoner,
         executor=PlaceholderExecutor(),
         learning=InMemoryLearning(),
         memory=InMemoryMemory(),
@@ -78,7 +86,7 @@ def build_runner(state_path: Path | None = None) -> MissionRunner:
         approval_evaluator=_NoopApproval(),
     )
     registry = SkillRegistry()
-    registry.register(ResearchSkill())
+    registry.register(ResearchSkill(provider=provider))
     skill_runtime = SkillRuntime(registry, PermissionManager())
     memory = InMemoryMemory()
     return MissionRunner(

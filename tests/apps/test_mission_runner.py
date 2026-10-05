@@ -5,6 +5,7 @@ from types import SimpleNamespace
 
 from apps.mission_runner import MissionRunner, build_parser
 from core.models import ExecutionReport, Goal, Task
+from core.skills.runtime import SkillExecutionResult, SkillStatus
 
 
 class RecordingGoalManager:
@@ -102,6 +103,32 @@ def test_run_mission_executes_and_records_history() -> None:
         assert skill_runtime.calls
         assert await memory.retrieve("mission:history") is not None
         assert orchestrator.calls[0][0].title == "Launch the mission"
+
+    asyncio.run(run())
+
+
+def test_mission_runner_unwraps_skill_execution_results() -> None:
+    async def run() -> None:
+        class RecordingSkillRuntime:
+            async def execute(self, skill_name: str, input_data: dict[str, object]) -> SkillExecutionResult:
+                return SkillExecutionResult(
+                    execution_id="exec-1",
+                    skill_name=skill_name,
+                    status=SkillStatus.COMPLETED,
+                    output={"topic": "demo", "metadata": {"executive_summary": "Summary"}},
+                )
+
+        runner = MissionRunner(
+            planner=RecordingPlanner(),
+            orchestrator=RecordingOrchestrator(),
+            decision_engine=RecordingDecisionEngine(),
+            skill_runtime=RecordingSkillRuntime(),
+            memory=RecordingMemory(),
+        )
+
+        result = await runner.run("Launch the mission")
+        assert result.skill_results[0].output["topic"] == "demo"
+        assert result.report.results[0]["metadata"]["executive_summary"] == "Summary"
 
     asyncio.run(run())
 

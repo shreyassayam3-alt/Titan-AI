@@ -129,6 +129,12 @@ class MissionRunner:
             {"goal": goal.title, "task": task.title, "context": context, "memory": self._memory},
         )
 
+    @staticmethod
+    def _normalize_skill_result(result: Any) -> Any:
+        if hasattr(result, "output") and result.output is not None:
+            return result.output
+        return result
+
     async def _run_orchestrator(
         self,
         goal: Goal,
@@ -138,21 +144,28 @@ class MissionRunner:
         *,
         context: Any | None,
     ) -> ExecutionReport:
+        normalized_results = tuple(self._normalize_skill_result(result) for result in skill_results)
+
         if self._orchestrator is None:
-            return ExecutionReport(goal=goal, tasks=plan, results=tuple(skill_results), strategy=decision)
+            return ExecutionReport(goal=goal, tasks=plan, results=normalized_results, strategy=decision)
 
         report = await self._orchestrator.execute(
             goal,
             context={
                 "plan": plan,
                 "decision": decision,
-                "skill_result": skill_results[-1] if skill_results else None,
+                "skill_result": normalized_results[-1] if normalized_results else None,
                 "context": context,
             },
         )
         if isinstance(report, ExecutionReport):
-            return report
-        return ExecutionReport(goal=goal, tasks=plan, results=tuple(skill_results), strategy=decision)
+            return ExecutionReport(
+                goal=report.goal,
+                tasks=report.tasks or plan,
+                results=normalized_results,
+                strategy=report.strategy,
+            )
+        return ExecutionReport(goal=goal, tasks=plan, results=normalized_results, strategy=decision)
 
     def _log(self, stage: str, value: Any) -> None:
         message = f"{stage}: {value}" if value is not None else stage

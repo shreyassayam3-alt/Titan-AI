@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Titan News</title>
+    <description>Fixture RSS feed for provider framework demos</description>
+    <item>
+      <title>Titan adds provider framework</title>
+      <link>https://example.test/titan-provider-framework</link>
+      <description>Titan now ships modular provider adapters for search, news, GitHub, RSS, and documents.</description>
+    </item>
+    <item>
+      <title>Mission runner can query multiple providers</title>
+      <link>https://example.test/mission-runner-providers</link>
+      <description>The provider registry can merge and rank provider responses for a single natural-language query.</description>
+    </item>
+  </channel>
+</rss>
