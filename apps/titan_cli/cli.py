@@ -1,4 +1,4 @@
-"""Live CLI for running TITAN missions with real-time feedback."""
+"""Enhanced CLI with persistent mission history and self-learning."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ import json
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
@@ -16,19 +17,21 @@ if str(REPO_ROOT) not in sys.path:
 from core.config.base import Config
 from core.models import Goal
 from core.orchestrator.learning_orchestrator import LearningOrchestrator
+from core.persistence import PersistentLearning, StateManager
 
 
 class TitanCLI:
-    """Interactive CLI for TITAN mission execution and monitoring."""
+    """Enhanced CLI for TITAN mission execution with persistence and learning."""
 
     def __init__(self, config: Config | None = None) -> None:
-        """Initialize the CLI with runtime configuration."""
+        """Initialize the CLI with persistent state management."""
         self.config = config or Config.from_env()
+        self.state_manager = StateManager(self.config.state_dir)
+        self.persistent_learning = PersistentLearning(self.state_manager)
         self.orchestrator = LearningOrchestrator.create_default()
-        self.mission_history: list[dict] = []
 
     async def run_mission(self, goal_text: str, description: str | None = None) -> dict:
-        """Execute a single mission and return structured results."""
+        """Execute a mission and persist the results."""
         print(f"\n{'='*70}")
         print(f"🚀 TITAN MISSION STARTED")
         print(f"{'='*70}")
@@ -46,14 +49,19 @@ class TitanCLI:
         )
 
         try:
-            print("[1/4] 🧠 Planning task decomposition...")
+            print("[1/5] 🧠 Planning task decomposition...")
             report = await self.orchestrator.execute(goal)
 
-            print("[2/4] ✅ Tasks executed successfully")
-            print(f"[3/4] 📚 Learning from outcomes...")
-            print(f"[4/4] 💾 Persisting mission state...\n")
+            print("[2/5] ✅ Tasks executed successfully")
+            print(f"[3/5] 📚 Learning from outcomes...")
 
-            # Build mission record
+            # Record learning
+            for task, result in zip(report.tasks, report.results):
+                await self.persistent_learning.record_completed_task(task, result)
+
+            print(f"[4/5] 💾 Persisting mission state...")
+
+            # Build and save mission record
             mission_record = {
                 "goal_id": goal.id,
                 "goal_title": goal.title,
@@ -79,7 +87,8 @@ class TitanCLI:
                 ],
             }
 
-            self.mission_history.append(mission_record)
+            mission_path = self.state_manager.save_mission(mission_record)
+            print(f"[5/5] 📊 Computing optimization metrics...\n")
 
             # Display results
             print(f"{'='*70}")
@@ -89,14 +98,15 @@ class TitanCLI:
             print(f"Status: {report.goal.status.value.upper()}")
             print(f"Tasks Executed: {len(report.tasks)}")
             print(f"Results Collected: {len(report.results)}")
+            print(f"Saved to: {mission_path}")
             print(f"Success Rate: {self.orchestrator.success_rate():.1%}")
             print(f"{'='*70}\n")
 
-            print("📊 Task Execution Summary:")
+            print("📋 Task Execution Summary:")
             for i, task in enumerate(report.tasks, 1):
                 print(f"  {i}. {task.title}")
                 print(f"     Status: {task.status.value}")
-                if i < len(report.results):
+                if i <= len(report.results):
                     result = report.results[i - 1]
                     print(f"     Output: {result.get('output', 'N/A')}")
                 print()
@@ -110,12 +120,12 @@ class TitanCLI:
             raise
 
     async def run_interactive(self) -> None:
-        """Run TITAN in interactive mode for continuous experimentation."""
+        """Run TITAN in interactive experimental mode."""
         print("\n" + "="*70)
         print("🤖 TITAN AI - Autonomous Mission Executor")
         print("="*70)
-        print("Enter mission goals to run them through TITAN's autonomous system.")
-        print("Type 'exit' to quit, 'history' to see past missions, 'stats' for summary.\n")
+        print("Enter mission goals to run through TITAN's autonomous system.")
+        print("Commands: 'history' | 'stats' | 'learn' | 'export' | 'exit'\n")
 
         while True:
             try:
@@ -128,6 +138,10 @@ class TitanCLI:
                     self._print_history()
                 elif goal_text.lower() == "stats":
                     self._print_stats()
+                elif goal_text.lower() == "learn":
+                    self._print_learning_recommendations()
+                elif goal_text.lower() == "export":
+                    self._export_data()
                 elif goal_text:
                     description = input("   Description (optional, press Enter to skip): ").strip()
                     await self.run_mission(goal_text, description or None)
@@ -139,48 +153,100 @@ class TitanCLI:
                 print(f"Error: {error}\n")
 
     def _print_history(self) -> None:
-        """Display mission history."""
-        if not self.mission_history:
+        """Display mission execution history."""
+        missions = self.state_manager.load_missions(limit=10)
+        if not missions:
             print("\n📭 No missions executed yet.\n")
             return
 
         print(f"\n{'='*70}")
-        print(f"📜 MISSION HISTORY ({len(self.mission_history)} total)")
+        print(f"📜 MISSION HISTORY (Last {len(missions)} missions)")
         print(f"{'='*70}")
-        for i, mission in enumerate(self.mission_history, 1):
+        for i, mission in enumerate(missions, 1):
+            timestamp = mission.get("timestamp", "Unknown")
             print(
                 f"{i}. {mission['goal_title']} | "
-                f"Status: {mission['status']} | "
-                f"Tasks: {mission['tasks_count']}"
+                f"Status: {mission['status'].upper()} | "
+                f"Tasks: {mission['tasks_count']} | "
+                f"Time: {timestamp[:19]}"
             )
         print()
 
     def _print_stats(self) -> None:
         """Display execution statistics."""
+        stats = self.state_manager.get_statistics()
         print(f"\n{'='*70}")
-        print(f"📈 EXECUTION STATISTICS")
+        print(f"📊 EXECUTION STATISTICS")
         print(f"{'='*70}")
-        print(f"Total Missions: {len(self.mission_history)}")
-        print(f"Total Tasks: {sum(m['tasks_count'] for m in self.mission_history)}")
-        print(f"Success Rate: {self.orchestrator.success_rate():.1%}")
-        print()
+        print(f"Total Missions: {stats['total_missions']}")
+        print(f"Completed: {stats['completed_missions']}")
+        print(f"Failed: {stats['failed_missions']}")
+        print(f"Total Tasks Executed: {stats['total_tasks']}")
+        print(f"Success Rate: {stats['success_rate']:.1%}")
+        print(f"{'='*70}\n")
+
+    def _print_learning_recommendations(self) -> None:
+        """Display self-learning optimization recommendations."""
+        metrics = self.persistent_learning.persist_learning_metrics()
+        recommendations = metrics.get("recommendations", [])
+
+        print(f"\n{'='*70}")
+        print(f"🧠 LEARNING RECOMMENDATIONS")
+        print(f"{'='*70}")
+
+        if not recommendations:
+            print("No patterns identified yet. Run more missions to build learning data.")
+        else:
+            for rec in recommendations:
+                print(f"  {rec}")
+
+        print(f"\nTask Patterns Analyzed: {len(metrics.get('task_patterns', {}))}")
+        print(f"Total Experiences: {metrics.get('total_experiences', 0)}")
+        print(f"{'='*70}\n")
+
+    def _export_data(self) -> None:
+        """Export mission data and learning metrics."""
+        export_dir = Path(self.config.state_dir) / "exports"
+        export_dir.mkdir(parents=True, exist_ok=True)
+
+        # Export missions
+        missions = self.state_manager.load_missions()
+        missions_file = export_dir / f"missions_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        with open(missions_file, "w") as f:
+            json.dump(missions, f, indent=2, default=str)
+
+        # Export stats
+        stats = self.state_manager.get_statistics()
+        stats_file = export_dir / f"statistics_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        with open(stats_file, "w") as f:
+            json.dump(stats, f, indent=2, default=str)
+
+        print(f"\n{'='*70}")
+        print(f"📁 DATA EXPORTED")
+        print(f"{'='*70}")
+        print(f"Missions: {missions_file}")
+        print(f"Statistics: {stats_file}")
+        print(f"{'='*70}\n")
 
 
 def build_parser() -> argparse.ArgumentParser:
     """Build the CLI argument parser."""
     parser = argparse.ArgumentParser(
-        description="TITAN AI - Autonomous Mission Executor",
+        description="🤖 TITAN AI - Autonomous Mission Executor with Self-Learning",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Examples:
+EXAMPLES:
   # Run a single mission
-  python -m apps.titan_cli.cli "Research market trends" --description "Analyze current AI market"
+  python -m apps.titan_cli "Research market trends" --description "Analyze current AI market"
 
   # Run interactive mode
-  python -m apps.titan_cli.cli --interactive
+  python -m apps.titan_cli --interactive
 
   # Set custom environment
-  TITAN_ENV=production python -m apps.titan_cli.cli "Deploy latest changes"
+  TITAN_ENV=production python -m apps.titan_cli "Deploy latest changes"
+
+  # Custom state directory
+  python -m apps.titan_cli --state-dir /tmp/titan --interactive
         """,
     )
 
@@ -212,6 +278,11 @@ Examples:
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
         help="Logging verbosity",
     )
+    parser.add_argument(
+        "--state-dir",
+        default="./.titan",
+        help="Directory for persistent mission state",
+    )
 
     return parser
 
@@ -225,6 +296,7 @@ async def main(argv: list[str] | None = None) -> int:
         environment=args.env,
         debug=args.env == "development",
         log_level=args.log_level,
+        state_dir=args.state_dir,
     )
 
     cli = TitanCLI(config)
@@ -236,7 +308,7 @@ async def main(argv: list[str] | None = None) -> int:
             parser.error("the following arguments are required: goal")
         try:
             await cli.run_mission(args.goal, args.description)
-        except Exception as error:
+        except Exception:
             return 1
 
     return 0
